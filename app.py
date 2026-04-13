@@ -22,10 +22,20 @@ from reportlab.platypus import PageTemplate, Frame
 from reportlab.pdfgen import canvas
 import os
 from flask import current_app
-import mercadopago
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
 
-MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN")
-APP_URL = os.environ.get("APP_URL", "http://localhost:5000")
+MAIL_SERVER   = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+MAIL_PORT     = int(os.environ.get("MAIL_PORT", 587))
+MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+DEST_EMAIL    = "heidi.ayelen@gmail.com"
+
+TITULO_INFORME   = "Informe de personalidad con orientación profesional"
+SUBTITULO_INFORME = "Eneagrama laboral"
 
 def add_page_number(canvas, doc):
     page_num = canvas.getPageNumber()
@@ -48,6 +58,233 @@ ALAS = {
     7: (6, 8),
     8: (7, 9),
     9: (8, 1),
+}
+
+# ── Integración / Desintegración ─────────────────────────────────────────────
+INTEGRACION = {
+    1: 7, 2: 4, 3: 6, 4: 1, 5: 8, 6: 9, 7: 5, 8: 2, 9: 3
+}
+DESINTEGRACION = {
+    1: 4, 2: 8, 3: 9, 4: 2, 5: 7, 6: 3, 7: 1, 8: 5, 9: 6
+}
+
+# ── Perfil laboral por tipo ───────────────────────────────────────────────────
+LABORAL_POR_TIPO = {
+    1: {
+        "estilo_trabajo": "Trabajas con orden, criterio y responsabilidad. Sueles enfocarte en hacer las cosas bien, cuidar la calidad y corregir desvíos antes de que crezcan.",
+        "liderazgo": "Lideras con ejemplo, exigencia y sentido de mejora. Das estructura, claridad y estándar.",
+        "como_te_ven": "Te ven responsable, confiable, detallista y serio. A veces también pueden percibirte rígido o demasiado crítico.",
+        "roles_ideales": ["Calidad", "Procesos", "Auditoría", "Compliance", "Coordinación operativa", "Docencia técnica"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 4: frustración, enojo interno, sensibilidad a lo que no sale como esperabas y mirada más crítica o pesimista.",
+        "recomendacion_alerta": "Bajar autoexigencia, priorizar, delegar y aceptar avances reales en vez de perfección.",
+    },
+    2: {
+        "estilo_trabajo": "Trabajas generando vínculo, cercanía y cooperación. Te sale naturalmente ayudar, detectar necesidades y sostener al equipo.",
+        "liderazgo": "Lideras desde la contención, el acompañamiento y la disponibilidad.",
+        "como_te_ven": "Te ven cálido, colaborador, presente y resolutivo con personas. A veces pueden sentirte sobreinvolucrado.",
+        "roles_ideales": ["RRHH", "Atención al cliente", "People care", "Capacitación", "Coordinación de equipos", "Acompañamiento / coaching"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 8: control, dureza, reproche o enojo por no sentirte valorado.",
+        "recomendacion_alerta": "Poner límites sanos, pedir de forma directa y no esperar reconocimiento implícito.",
+    },
+    3: {
+        "estilo_trabajo": "Trabajas con foco en resultados, velocidad, logro y eficiencia. Tiendes a ordenar prioridades para avanzar.",
+        "liderazgo": "Lideras por objetivos, empuje y capacidad de ejecución.",
+        "como_te_ven": "Te ven productivo, competitivo, resolutivo y orientado a metas. A veces pueden percibirte demasiado pendiente de la imagen o del rendimiento.",
+        "roles_ideales": ["Ventas", "Negocios", "Dirección comercial", "Project management", "Emprendimientos", "Liderazgo de equipos"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 9: postergación, desconexión, baja energía y dificultad para sostener foco.",
+        "recomendacion_alerta": "Volver a una meta concreta, dividir tareas y reconectar con motivación genuina, no solo con rendimiento.",
+    },
+    4: {
+        "estilo_trabajo": "Trabajas con profundidad, sensibilidad y creatividad. Necesitas sentido, autenticidad y espacio para aportar mirada propia.",
+        "liderazgo": "Lideras inspirando, movilizando emocionalmente y aportando identidad.",
+        "como_te_ven": "Te ven creativo, original, sensible y perceptivo. A veces pueden sentirte variable o intenso.",
+        "roles_ideales": ["Diseño", "Branding", "Comunicación", "Arte", "Marketing creativo", "Desarrollo conceptual"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 2: sobreinvolucrarte, buscar validación o depender demasiado del vínculo.",
+        "recomendacion_alerta": "Ordenar rutina, poner estructura y volver a hechos concretos antes de interpretar todo desde la emoción.",
+    },
+    5: {
+        "estilo_trabajo": "Trabajas mejor con autonomía, análisis y profundidad. Te destacas en comprensión, estrategia y especialización.",
+        "liderazgo": "Lideras desde el conocimiento, la claridad conceptual y la precisión.",
+        "como_te_ven": "Te ven inteligente, observador, estratégico y sereno. A veces pueden sentirte distante o poco expresivo.",
+        "roles_ideales": ["Análisis de datos", "IT", "Investigación", "Planeamiento", "Ingeniería", "Consultoría técnica"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 7: dispersión, exceso de ideas, dificultad para cerrar y escapismo mental.",
+        "recomendacion_alerta": "Reducir estímulos, priorizar una sola línea de acción y bajar de la mente a la ejecución.",
+    },
+    6: {
+        "estilo_trabajo": "Trabajas con compromiso, previsión y lectura de riesgos. Sueles cuidar procesos, seguridad y consistencia.",
+        "liderazgo": "Lideras sosteniendo, anticipando problemas y cuidando al equipo.",
+        "como_te_ven": "Te ven leal, confiable, prudente y comprometido. A veces pueden percibir duda o exceso de preocupación.",
+        "roles_ideales": ["Operaciones", "Logística", "Seguridad", "Administración", "Gestión institucional", "Soporte"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 3: hiperexigencia, sobreactividad, necesidad de demostrar y ansiedad productiva.",
+        "recomendacion_alerta": "No decidir desde miedo, chequear hechos y sostener calma antes de acelerar.",
+    },
+    7: {
+        "estilo_trabajo": "Trabajas con dinamismo, ideas, entusiasmo y visión de oportunidades. Te mueven la variedad y la expansión.",
+        "liderazgo": "Lideras motivando, abriendo caminos y contagiando energía.",
+        "como_te_ven": "Te ven creativo, rápido, positivo e inspirador. A veces pueden sentirte disperso o poco constante.",
+        "roles_ideales": ["Innovación", "Marketing", "Ventas consultivas", "Emprendimientos", "Comunicación", "Desarrollo de negocios"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 1: rigidez, irritación, crítica y frustración por límites o detalles.",
+        "recomendacion_alerta": "Bajar el ritmo, terminar antes de abrir algo nuevo y aceptar estructura como aliada.",
+    },
+    8: {
+        "estilo_trabajo": "Trabajas con decisión, fuerza y capacidad de avance. Sueles tomar el mando frente a desafíos y conflictos.",
+        "liderazgo": "Lideras con presencia, dirección, coraje y protección.",
+        "como_te_ven": "Te ven fuerte, directo, ejecutivo y valiente. A veces pueden sentirte dominante o confrontativo.",
+        "roles_ideales": ["Dirección", "Negociación", "Gestión", "Liderazgo operativo", "Expansión", "Crisis management"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 5: aislamiento, desconfianza, corte emocional y retiro estratégico excesivo.",
+        "recomendacion_alerta": "No cerrarte, compartir contexto con el equipo y pedir apoyo antes de cargar todo solo.",
+    },
+    9: {
+        "estilo_trabajo": "Trabajas integrando, armonizando y sosteniendo estabilidad. Tiendes a unir personas y bajar tensión en los equipos.",
+        "liderazgo": "Lideras facilitando acuerdos, escuchando y generando cohesión.",
+        "como_te_ven": "Te ven tranquilo, conciliador, amable y estable. A veces pueden percibir lentitud o dificultad para priorizar.",
+        "roles_ideales": ["Coordinación", "Cultura", "Facilitación", "Soporte de equipos", "Mediación", "Gestión transversal"],
+        "alerta_desintegracion": "Bajo estrés puedes irte al 6: ansiedad, sobreduda, preocupación y dificultad para decidir.",
+        "recomendacion_alerta": "Tomar postura, fijar prioridad del día y no diluirte en agendas ajenas.",
+    },
+}
+
+# ── Matching por integración (tipo principal → su tipo de integración) ────────
+MATCHING_INTEGRACION = {
+    (1, 7): (
+        "Expansión desde la estructura: combinas tu capacidad de orden, criterio y mejora continua "
+        "con la apertura, flexibilidad y creatividad del tipo 7. Esto te permite pasar de la exigencia "
+        "al disfrute, incorporar nuevas ideas y trabajar con mayor liviandad sin perder calidad. "
+        "En lo laboral, tu evolución está en aprender a innovar dentro de la estructura, soltando el "
+        "perfeccionismo excesivo para ganar agilidad y bienestar."
+    ),
+    (2, 4): (
+        "Profundidad emocional en el vínculo: integras tu orientación a ayudar con una conexión más "
+        "auténtica con tus propias emociones. Esto te permite dejar de dar desde la necesidad y empezar "
+        "a vincularte desde la autenticidad. En lo laboral, se traduce en relaciones más genuinas, menos "
+        "dependencia del reconocimiento y mayor capacidad de aportar valor desde tu identidad real."
+    ),
+    (3, 6): (
+        "Liderazgo con consciencia y sostén: sumas a tu impulso por lograr objetivos la capacidad de "
+        "prever, cuidar procesos y construir confianza. Pasas de la eficiencia individual a un liderazgo "
+        "más comprometido con el equipo. En lo laboral, esto se traduce en resultados sostenibles, mayor "
+        "credibilidad y capacidad de liderar estructuras más complejas."
+    ),
+    (4, 1): (
+        "Creatividad con estructura: integras tu mundo emocional y creativo con orden, disciplina y "
+        "capacidad de ejecución. Esto te permite materializar ideas y sostener procesos sin perder "
+        "identidad. En lo laboral, tu evolución está en convertir inspiración en resultados concretos, "
+        "logrando consistencia y profesionalismo."
+    ),
+    (5, 8): (
+        "Conocimiento que acciona: combinas tu capacidad analítica con decisión y presencia. Pasas de "
+        "observar a intervenir, de pensar a ejecutar. En lo laboral, esto se traduce en liderazgo "
+        "estratégico, capacidad de tomar decisiones difíciles y llevar tus ideas a la acción con "
+        "impacto real."
+    ),
+    (6, 9): (
+        "Confianza y estabilidad interna: integras tu mirada preventiva con calma y aceptación. Esto "
+        "te permite bajar la ansiedad y actuar desde mayor seguridad interna. En lo laboral, se traduce "
+        "en mejor toma de decisiones, menos reactividad y mayor capacidad de sostener equipos desde la "
+        "tranquilidad."
+    ),
+    (7, 5): (
+        "Enfoque y profundidad: integras tu energía, ideas y entusiasmo con capacidad de concentración "
+        "y análisis. Esto te permite dejar de dispersarte y profundizar en lo importante. En lo laboral, "
+        "tu evolución está en priorizar, sostener procesos y convertir ideas en proyectos concretos con "
+        "valor real."
+    ),
+    (8, 2): (
+        "Liderazgo con empatía: integras tu fuerza y capacidad de decisión con sensibilidad hacia los "
+        "demás. Esto te permite liderar no solo desde el poder, sino también desde el vínculo. En lo "
+        "laboral, se traduce en equipos más comprometidos, mejor clima y un liderazgo más completo y "
+        "humano."
+    ),
+    (9, 3): (
+        "Acción con dirección: integras tu capacidad de armonizar con foco en objetivos y ejecución. "
+        "Esto te permite salir de la inercia y avanzar con claridad. En lo laboral, tu evolución está "
+        "en tomar protagonismo, priorizar y transformar ideas en resultados concretos."
+    ),
+}
+
+# ── Matching de equipo por tipo ───────────────────────────────────────────────
+MATCHING_EQUIPO = {
+    1: {
+        "fluidez": [5, 6, 3],
+        "complemento": [2, 7, 9],
+        "friccion": [4, 8],
+        "texto_fluidez": "Trabajas con mayor fluidez con perfiles analíticos, responsables y orientados a resultados, que valoran el orden, la coherencia y la mejora continua.",
+        "texto_complemento": "Te enriquecen perfiles que aportan calidez, flexibilidad o integración, ayudándote a soltar rigidez y ampliar tu mirada.",
+        "texto_friccion": "Las tensiones pueden aparecer con perfiles más emocionales o confrontativos, especialmente cuando percibes desorden, intensidad o falta de criterio.",
+        "clave": "Tu crecimiento en equipo está en flexibilizar estándares sin perder calidad, integrando diversidad de formas de hacer las cosas.",
+    },
+    2: {
+        "fluidez": [9, 6, 4],
+        "complemento": [1, 3, 8],
+        "friccion": [5, 7],
+        "texto_fluidez": "Trabajas mejor en entornos colaborativos y empáticos, donde el vínculo, la cercanía y el cuidado del otro son valorados.",
+        "texto_complemento": "Te potencian perfiles estructurados, ejecutivos o directivos que aportan foco, límites y dirección.",
+        "texto_friccion": "Puede haber tensión con perfiles más autónomos, distantes o dispersos, especialmente si no sentís reciprocidad o reconocimiento.",
+        "clave": "Tu crecimiento está en sostener tu valor sin sobreinvolucrarte, poniendo límites claros en el vínculo laboral.",
+    },
+    3: {
+        "fluidez": [1, 6, 7],
+        "complemento": [5, 9, 2],
+        "friccion": [4, 8],
+        "texto_fluidez": "Te potenciás con perfiles orientados a la acción, la eficiencia y los resultados, que acompañan tu ritmo y foco.",
+        "texto_complemento": "Te enriquecen perfiles que aportan análisis, integración o sensibilidad relacional, equilibrando tu orientación al logro.",
+        "texto_friccion": "Las tensiones pueden surgir con perfiles muy emocionales o con estilos de liderazgo fuertes, especialmente si compiten por el control o el reconocimiento.",
+        "clave": "Tu crecimiento está en integrar resultados con vínculo y profundidad, sin medir todo solo desde el rendimiento.",
+    },
+    4: {
+        "fluidez": [2, 5, 9],
+        "complemento": [1, 3, 8],
+        "friccion": [7, 6],
+        "texto_fluidez": "Trabajas mejor con perfiles sensibles, profundos o reflexivos, que respetan tu mundo interno y tu forma de procesar.",
+        "texto_complemento": "Te potencian perfiles que aportan estructura, foco y decisión, ayudándote a materializar ideas y sostener procesos.",
+        "texto_friccion": "Puede haber tensión con estilos muy acelerados, superficiales o excesivamente racionales, que no conectan con tu profundidad.",
+        "clave": "Tu crecimiento está en transformar emoción en acción, sosteniendo consistencia sin perder autenticidad.",
+    },
+    5: {
+        "fluidez": [1, 9, 6],
+        "complemento": [8, 3, 2],
+        "friccion": [7, 2],
+        "texto_fluidez": "Te sentís cómodo con perfiles previsibles, estructurados y respetuosos del espacio, que valoran la claridad y el análisis.",
+        "texto_complemento": "Te enriquecen perfiles que impulsan acción, vínculo o exposición, ayudándote a salir del aislamiento y llevar ideas a la práctica.",
+        "texto_friccion": "Las tensiones pueden aparecer con perfiles invasivos, demandantes o dispersos, especialmente si percibís sobrecarga o falta de foco.",
+        "clave": "Tu crecimiento está en compartir conocimiento y participar más activamente, sin perder tu profundidad.",
+    },
+    6: {
+        "fluidez": [1, 2, 9],
+        "complemento": [3, 5, 8],
+        "friccion": [7, 4],
+        "texto_fluidez": "Trabajas mejor con perfiles confiables, claros y colaborativos, que sostienen estructura y compromiso.",
+        "texto_complemento": "Te potencian perfiles que aportan decisión, visión o análisis, ayudándote a salir de la duda y avanzar con mayor seguridad.",
+        "texto_friccion": "Puede haber tensión con estilos imprevisibles, emocionales o excesivamente cambiantes, que activan tu incertidumbre.",
+        "clave": "Tu crecimiento está en confiar en tu criterio y decidir con mayor autonomía, reduciendo la necesidad de validación constante.",
+    },
+    7: {
+        "fluidez": [3, 8, 2],
+        "complemento": [5, 1, 6],
+        "friccion": [4, 1],
+        "texto_fluidez": "Te potenciás con perfiles dinámicos, resolutivos y energéticos, que acompañan tu ritmo y entusiasmo.",
+        "texto_complemento": "Te enriquecen perfiles que aportan foco, método y profundidad, ayudándote a sostener lo que iniciás.",
+        "texto_friccion": "Las tensiones pueden aparecer con perfiles más sensibles o rígidos, especialmente cuando sentís límites o restricciones.",
+        "clave": "Tu crecimiento está en sostener foco y cerrar procesos, integrando disciplina sin perder creatividad.",
+    },
+    8: {
+        "fluidez": [3, 7, 1],
+        "complemento": [2, 5, 9],
+        "friccion": [6, 4],
+        "texto_fluidez": "Trabajas mejor con perfiles fuertes, directos y orientados a la acción, que sostienen ritmo y decisión.",
+        "texto_complemento": "Te potencian perfiles que aportan empatía, análisis o integración, equilibrando tu intensidad y liderazgo.",
+        "texto_friccion": "Puede haber tensión con estilos más inseguros o emocionalmente intensos, especialmente si percibís debilidad o falta de claridad.",
+        "clave": "Tu crecimiento está en integrar sensibilidad y escucha, liderando desde la fuerza pero también desde el vínculo.",
+    },
+    9: {
+        "fluidez": [2, 4, 5],
+        "complemento": [3, 1, 8],
+        "friccion": [6, 3],
+        "texto_fluidez": "Trabajas con mayor fluidez en entornos armónicos, con perfiles empáticos y reflexivos que respetan los tiempos y el clima.",
+        "texto_complemento": "Te potencian perfiles que aportan dirección, estructura y empuje, ayudándote a priorizar y avanzar.",
+        "texto_friccion": "Las tensiones pueden aparecer con estilos exigentes, ansiosos o muy orientados a resultados, que alteran tu equilibrio.",
+        "clave": "Tu crecimiento está en tomar protagonismo, decidir y sostener tu agenda sin diluirte en la del equipo.",
+    },
 }
 
 DESCRIPCION_ALAS = {
@@ -515,7 +752,137 @@ def build_bonus_estructura_pensamiento(porcentaje_scores: dict) -> dict:
         },
         "sintesis": sintesis,
     }
-    
+
+
+# ── Perfil laboral ────────────────────────────────────────────────────────────
+
+def build_perfil_laboral(top_types: list, porcentaje_scores: dict, eneatipo_textos: dict) -> dict:
+    """
+    Devuelve el perfil laboral completo:
+    estilo, liderazgo, cómo te ven, roles ideales, alerta de desintegración
+    y matching de integración (cuando el % del tipo de integración supera la media).
+    """
+    principal = top_types[0] if top_types else max(porcentaje_scores, key=porcentaje_scores.get)
+    base = LABORAL_POR_TIPO[principal]
+
+    tipo_integ  = INTEGRACION[principal]
+    tipo_desint = DESINTEGRACION[principal]
+
+    titulo_integ  = eneatipo_textos.get(tipo_integ,  {}).get("titulo", f"Tipo {tipo_integ}")
+    titulo_desint = eneatipo_textos.get(tipo_desint, {}).get("titulo", f"Tipo {tipo_desint}")
+
+    pct_desint = porcentaje_scores.get(tipo_desint, 0)
+    pct_integ  = porcentaje_scores.get(tipo_integ,  0)
+    alerta_activa = (pct_desint > 11.0) and (pct_desint > pct_integ)
+
+    # matching de integración: se activa cuando el tipo de integración supera la media
+    matching_desc = None
+    if pct_integ >= MEDIA_TEO:
+        matching_desc = MATCHING_INTEGRACION.get((principal, tipo_integ))
+
+    # matching de equipo
+    equipo = MATCHING_EQUIPO.get(principal, {})
+
+    return {
+        "tipo_principal":         principal,
+        "estilo_trabajo":         base["estilo_trabajo"],
+        "liderazgo":              base["liderazgo"],
+        "como_te_ven":            base["como_te_ven"],
+        "roles_ideales":          list(base["roles_ideales"]),
+        "alerta_activa":          alerta_activa,
+        "tipo_desintegracion":    tipo_desint,
+        "pct_desintegracion":     pct_desint,
+        "tipo_integracion":       tipo_integ,
+        "pct_integracion":        pct_integ,
+        "alerta_desintegracion":  base["alerta_desintegracion"],
+        "recomendacion_alerta":   base["recomendacion_alerta"],
+        "integracion": (
+            f"En evolución sana, tomás recursos de {titulo_integ}: "
+            f"incorporás fortalezas que expanden tu desempeño laboral."
+        ),
+        "desintegracion": (
+            f"En estrés, tendés a mostrar rasgos de {titulo_desint}. "
+            f"Conviene observar señales tempranas para no afectar vínculos, foco ni rendimiento."
+        ),
+        "matching_desc": matching_desc,
+        # equipo
+        "equipo_fluidez":        equipo.get("fluidez", []),
+        "equipo_complemento":    equipo.get("complemento", []),
+        "equipo_friccion":       equipo.get("friccion", []),
+        "equipo_texto_fluidez":  equipo.get("texto_fluidez", ""),
+        "equipo_texto_complemento": equipo.get("texto_complemento", ""),
+        "equipo_texto_friccion": equipo.get("texto_friccion", ""),
+        "equipo_clave":          equipo.get("clave", ""),
+    }
+
+
+def build_soft_skills(porcentaje_scores: dict,
+                      sintesis_parrafos: list,
+                      sintesis_afinidades_parrafos: list,
+                      opuestos_sintesis: list) -> dict:
+    """
+    Extrae palabras-clave de las síntesis según si el tipo está sobre o bajo la media.
+    Devuelve {"soft_skills": [...], "areas_mejora": [...]}.
+    """
+    soft_skills  = []
+    areas_mejora = []
+
+    for tipo, pct in porcentaje_scores.items():
+        palabra_afin  = PALABRAS_AFINIDAD_POR_TIPO.get(tipo, "")
+        virtud        = VIRTUDES_POR_TIPO.get(tipo, "")
+        if pct >= MEDIA_TEO:
+            if palabra_afin and palabra_afin not in soft_skills:
+                soft_skills.append(palabra_afin)
+            if virtud and virtud not in soft_skills:
+                soft_skills.append(virtud)
+        else:
+            if palabra_afin and palabra_afin not in areas_mejora:
+                areas_mejora.append(palabra_afin)
+            if virtud and virtud not in areas_mejora:
+                areas_mejora.append(virtud)
+
+    return {"soft_skills": soft_skills, "areas_mejora": areas_mejora}
+
+
+def enviar_informe_por_email(destinatario: str, pdf_bytes: bytes, propietario: dict) -> bool:
+    """Envía el PDF del informe como adjunto por email. Retorna True si tuvo éxito."""
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return False
+    try:
+        nombre = propietario.get("nombre", "Candidato")
+        msg = MIMEMultipart()
+        msg["From"]    = MAIL_USERNAME
+        msg["To"]      = destinatario
+        msg["Subject"] = f"Informe de personalidad con orientación profesional — {nombre}"
+
+        cuerpo = (
+            f"Se adjunta el informe Eneagrama laboral de {nombre}.\n\n"
+            f"Email: {propietario.get('email', '-')}\n"
+            f"Fecha del test: {propietario.get('fecha_test', '-')}\n\n"
+            "AZ Consultora | @az_coaching.terapeutico | +54 2975203761"
+        )
+        msg.attach(MIMEText(cuerpo, "plain", "utf-8"))
+
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(pdf_bytes)
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f'attachment; filename="Informe_Eneagrama_{nombre}.pdf"',
+        )
+        msg.attach(part)
+
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
+            server.sendmail(MAIL_USERNAME, destinatario, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[EMAIL ERROR] {e}")
+        return False
+
+
 def generar_radar_image(resultados: dict):
     """
     resultados: {"1": 12.3, "2": 8.4, ...}
@@ -587,396 +954,275 @@ if engine is not None:
     Base.metadata.create_all(engine)
     
 def build_pdf_from_payload(payload: dict) -> bytes:
-    buffer = io.BytesIO()
-    desarrollo = payload.get("desarrollo", {})  # ← UNA VEZ ACÁ ARRIBA
-    top_types = payload.get("graficos_anexos", {}).get("top_types", [])
+    buffer   = io.BytesIO()
+    desarrollo = payload.get("desarrollo", {})
+    top_types  = payload.get("graficos_anexos", {}).get("top_types", [])
     eneatipo_data_raw = desarrollo.get("eneatipo_textos", {})
-    eneatipo_data = {int(k): v for k, v in eneatipo_data_raw.items()}    
-    
+    eneatipo_data = {int(k): v for k, v in eneatipo_data_raw.items()}
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=2*cm,
-        rightMargin=2*cm,
-        topMargin=3*cm,
-        bottomMargin=2*cm,
-        title=payload.get("titulo", "Informe")
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=3*cm,  bottomMargin=2*cm,
+        title=payload.get("titulo", TITULO_INFORME),
     )
 
     styles = getSampleStyleSheet()
-    
-    styles.add(
-    ParagraphStyle(
-        name="Body",
-        parent=styles["BodyText"],
-        alignment=TA_JUSTIFY,
-        leading=15,
-        spaceAfter=8
-    )
-)
-    
+    styles.add(ParagraphStyle(name="Body",    parent=styles["BodyText"],
+                              alignment=TA_JUSTIFY, leading=15, spaceAfter=8))
+    styles.add(ParagraphStyle(name="H1",      parent=styles["Heading1"],
+                              alignment=TA_JUSTIFY, spaceAfter=12))
+    styles.add(ParagraphStyle(name="H2",      parent=styles["Heading2"],
+                              alignment=TA_JUSTIFY, spaceAfter=8))
+    styles.add(ParagraphStyle(name="H3",      parent=styles["Heading3"], spaceAfter=6))
+    styles.add(ParagraphStyle(name="BodyPro", parent=styles["Body"],
+                              fontSize=11, leading=15))
+    styles.add(ParagraphStyle(name="Tag",     parent=styles["Body"],
+                              fontSize=10, leading=13, spaceAfter=4,
+                              leftIndent=12, textColor="darkslategray"))
 
-    styles.add(ParagraphStyle(name="H1", parent=styles["Heading1"], alignment=TA_JUSTIFY, spaceAfter=12))
-    styles.add(ParagraphStyle(name="H2", parent=styles["Heading2"], alignment=TA_JUSTIFY, spaceAfter=8))
-    styles.add(ParagraphStyle(name="BodyPro", parent=styles["Body"], fontSize=11, leading=15))
-    styles.add(ParagraphStyle(name="H3", parent=styles["Heading3"], spaceAfter=6))
-    
     story = []
-
     logo_path = os.path.join(current_app.root_path, "static", "img", "logo_az.png")
 
-    # ---------------------------------
-    # PORTADA
-    # ---------------------------------
-    
-    logo_path = os.path.join(current_app.root_path, "static", "img", "logo_az.png")
-    
+    # ── PORTADA ──────────────────────────────────────────────────────────────
     logo = Image(logo_path)
-    logo.drawHeight = 4 * cm
-    logo.drawWidth = 4 * cm
-    
+    logo.drawHeight = 4*cm
+    logo.drawWidth  = 4*cm
     story.append(Spacer(1, 6*cm))
     story.append(logo)
     story.append(Spacer(1, 1*cm))
-    story.append(Paragraph(payload.get("titulo", ""), styles["H1"]))
-    story.append(Spacer(1, 0.5*cm))
-    story.append(Paragraph("Eneagrama evolutivo integral", styles["H2"]))
+    story.append(Paragraph(TITULO_INFORME,   styles["H1"]))
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph(SUBTITULO_INFORME, styles["H2"]))
     story.append(Spacer(1, 1*cm))
-    story.append(Paragraph("Informe confidencial", styles["H2"]))    
-    story.append(PageBreak()) 
+    story.append(Paragraph("Informe confidencial", styles["H2"]))
+    story.append(PageBreak())
 
-    # Título
-    story.append(Paragraph(payload.get("titulo", "Informe profundo de autoconocimiento"), styles["H1"]))
+    # ── CARÁTULA ─────────────────────────────────────────────────────────────
+    story.append(Paragraph(TITULO_INFORME,   styles["H1"]))
+    story.append(Paragraph(SUBTITULO_INFORME, styles["H2"]))
     story.append(Paragraph(f"Analista: {payload.get('analista', '')}", styles["Body"]))
 
-    # Propietario + fecha
     propietario = payload.get("propietario", {}) or {}
-    fecha_test = payload.get("fecha_test") or propietario.get("fecha_test", "")
-
+    fecha_test  = payload.get("fecha_test") or propietario.get("fecha_test", "")
     story.append(Spacer(1, 8))
-    story.append(Paragraph("Propietario del eneagrama", styles["H2"]))
+    story.append(Paragraph("Datos del candidato", styles["H2"]))
     story.append(Paragraph(f"Nombre: {propietario.get('nombre','')}", styles["Body"]))
     story.append(Paragraph(f"Email: {propietario.get('email','')}", styles["Body"]))
     story.append(Paragraph(f"Sexo: {propietario.get('sexo','')}", styles["Body"]))
     story.append(Paragraph(f"Fecha nacimiento: {propietario.get('fecha_nacimiento','')}", styles["Body"]))
-    story.append(Paragraph(f"Hora nacimiento: {propietario.get('hora_nacimiento') or 'Desconocida'}", styles["Body"]))
     story.append(Paragraph(f"Fecha del test: {fecha_test}", styles["Body"]))
 
-    # Introducción
     story.append(Spacer(1, 10))
     story.append(Paragraph("Introducción", styles["H2"]))
-    intro = (
-        "A continuación verás los resultados de tu test de autoidentificación personal. "
-        "Esta información te ayudará a desarrollar y potenciar tu perfil personal, profesional y vocacional. "
-        "Recordá que el eneagrama es dinámico: repetirlo anualmente te permitirá observar tu evolución hacia "
-        "un mayor equilibrio y bienestar."
-    )
-    story.append(Paragraph(intro, styles["Body"]))
+    story.append(Paragraph(
+        "Este informe presenta los resultados del test de autoidentificación por Eneagrama "
+        "con orientación profesional. El objetivo es brindar al evaluador y al candidato una "
+        "lectura clara del estilo de trabajo, potencial de liderazgo, compatibilidad de roles "
+        "y señales a monitorear. El Eneagrama es dinámico: los resultados reflejan el momento "
+        "actual y pueden evolucionar con el tiempo.", styles["Body"]))
 
-    # ---------------------------------
-    # DESARROLLO
-    # ---------------------------------
+    # ── ENEATIPO PRINCIPAL ────────────────────────────────────────────────────
     story.append(Spacer(1, 12))
-    story.append(Paragraph("Desarrollo", styles["H2"]))
-    
-    # ---------------------------------
-    # Afirmaciones marcadas (como web)
-    # ---------------------------------
-    total_marked = payload.get("desarrollo", {}).get("total_marked", 0)
-    total_preguntas = 270
-    
-    porcentaje_total = round((total_marked / total_preguntas) * 100, 1) if total_marked else 0
-    
-    texto_afirmaciones = (
-        f"<b>Afirmaciones marcadas:</b> {total_marked} de {total_preguntas} — {porcentaje_total}%"
-    )
-    
-    story.append(Paragraph(texto_afirmaciones, styles["BodyPro"]))
-    story.append(Spacer(1, 6))
-    
-    # Mensaje condicional (igual que la web)
-    if porcentaje_total > 30:
-        mensaje = "📣 <b>No tienes problema en mostrarte.</b>"
-    else:
-        mensaje = "🤫 <b>Eres más bien reservado, te cuesta mostrarte.</b>"
-    
-    story.append(Paragraph(mensaje, styles["BodyPro"]))
-    story.append(Spacer(1, 12))
+    story.append(Paragraph("Eneatipo principal", styles["H2"]))
 
-    # ---------------------------------
-    # Eneatipo principal
-    # ---------------------------------
-    desarrollo = payload.get("desarrollo", {})
-    eneatipo_data = desarrollo.get("eneatipo_textos", {})
-    top_types = payload.get("graficos_anexos", {}).get("top_types", [])
-    
-    if top_types:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Eneatipo principal", styles["H2"]))
-    
-        for tipo in top_types:
-            data = eneatipo_data.get(tipo) or eneatipo_data.get(str(tipo))
-            if not data:
-                continue
-    
-            story.append(Spacer(1, 6))
-            story.append(Paragraph(data["titulo"], styles["H2"]))
-            story.append(Paragraph(data["descripcion"], styles["Body"]))
-            story.append(Paragraph(data["caracteristicas"], styles["Body"]))
-    
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("Orientación vocacional", styles["H3"]))
-            story.append(Paragraph(data["orientacion"], styles["Body"]))
-    
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("Claves de mejora", styles["H3"]))
-            story.append(Paragraph(data["mejorar"], styles["Body"]))
-  
+    for tipo in top_types:
+        data = eneatipo_data.get(tipo) or eneatipo_data.get(str(tipo))
+        if not data:
+            continue
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(data["titulo"], styles["H2"]))
+        story.append(Paragraph(data["descripcion"], styles["Body"]))
+        story.append(Paragraph(data["caracteristicas"], styles["Body"]))
+
+        # Orientación vocacional: solo vocación base + clave evolutiva
+        orientacion_completa = data.get("orientacion", "")
+        lineas_ori = orientacion_completa.splitlines()
+        en_base = False
+        en_clave = False
+        bloque_filtrado = []
+        for linea in lineas_ori:
+            if "Vocación base" in linea or "🎯" in linea:
+                en_base = True
+                en_clave = False
+                bloque_filtrado.append(linea)
+            elif "subtipo" in linea.lower() or "🔁" in linea:
+                en_base = False
+                en_clave = False
+            elif "Clave evolutiva" in linea or "🌱" in linea:
+                en_base = False
+                en_clave = True
+                bloque_filtrado.append(linea)
+            elif en_base or en_clave:
+                bloque_filtrado.append(linea)
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Orientación vocacional", styles["H3"]))
+        story.append(Paragraph("\n".join(bloque_filtrado), styles["Body"]))
+
     # Ala
-    ala_textos = payload.get("ala_textos", [])
-    if ala_textos:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Ala", styles["H2"]))
-        for txt in ala_textos:
-            story.append(Paragraph(txt, styles["Body"]))
-    
-    # Camino evolutivo
-    camino = payload.get("desarrollo", {}).get("camino_evolucion", [])
-    if camino:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Camino evolutivo", styles["H2"]))
-        for tipo, pct, texto in camino:
-            story.append(Paragraph(f"{texto}", styles["Body"]))
-    
-    desarrollo = payload.get("desarrollo", {})
-    
-    # Afinidades
-    if desarrollo.get("afinidades_parrafos"):
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Ejes de Afinidad", styles["H2"]))
-    
-        for p in desarrollo.get("afinidades_parrafos", []):
-            story.append(Paragraph(p, styles["Body"]))
-    
-    # ---------------------------------
-    # Síntesis de Afinidades
-    # ---------------------------------
-    sintesis_afinidades = desarrollo.get("sintesis_afinidades", [])
-    if sintesis_afinidades:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis de afinidades", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in sintesis_afinidades:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # ---------------------------------
-    # Opuestos Complementarios
-    # ---------------------------------
-    opuestos_parrafos = desarrollo.get("opuestos_parrafos", [])
-    if opuestos_parrafos:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Opuestos complementarios", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in opuestos_parrafos:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # ---------------------------------
-    # Síntesis de Opuestos
-    # ---------------------------------
-    opuestos_sintesis = desarrollo.get("opuestos_sintesis", [])
-    if opuestos_sintesis:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis de opuestos", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in opuestos_sintesis:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # ---------------------------------
-    # Análisis de Ejes
-    # ---------------------------------
-    analisis_ejes = desarrollo.get("analisis_ejes", [])
-    if analisis_ejes:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Análisis de ejes", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in analisis_ejes:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # ---------------------------------
-    # Síntesis Evolutiva
-    # ---------------------------------
-    sintesis_evolutiva = desarrollo.get("sintesis_evolutiva", [])
-    if sintesis_evolutiva:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis evolutiva", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in sintesis_evolutiva:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # ---------------------------------
-    # Estructura del pensamiento
-    # ---------------------------------
-    desarrollo = payload.get("desarrollo", {})
-    bonus = desarrollo.get("bonus_estructura", {})
-    bonus_sintesis = desarrollo.get("bonus_sintesis", [])
-    
-    if bonus:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Estructura del pensamiento", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for value in bonus.values():
-            if isinstance(value, dict) and "parrafo" in value:
-                story.append(Paragraph(value["parrafo"], styles["Body"]))
-    
-    
-    if bonus_sintesis:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis estructura del pensamiento", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for linea in bonus_sintesis:
-            story.append(Paragraph(linea, styles["Body"]))
-
-    # ---------------------------------
-    # CONCLUSIONES FINALES
-    # ---------------------------------
-    story.append(Spacer(1, 12))
-    story.append(PageBreak())
-    story.append(Paragraph("🏁 Conclusiones", styles["H2"]))
-    story.append(Spacer(1, 6))
-    
-    desarrollo = payload.get("desarrollo", {})
-    
-    # -------------------------
-    # Eneatipo principal
-    # -------------------------
-    top_types = payload.get("graficos_anexos", {}).get("top_types", [])
-    eneatipo_data = desarrollo.get("eneatipo_textos", {})
-    
-    if top_types:
-        for tipo in top_types:
-            data = eneatipo_data.get(tipo) or eneatipo_data.get(str(tipo))
-            if not data:
-                continue
-    
-            story.append(Spacer(1, 6))
-            story.append(Paragraph(data["titulo"], styles["H2"]))
-            story.append(Paragraph(data["descripcion"], styles["Body"]))
-    
-    
-    # -------------------------
-    # Ala
-    # -------------------------
     ala_textos = desarrollo.get("ala_textos", [])
     if ala_textos:
         story.append(Spacer(1, 8))
-        story.append(Paragraph("🪽 Tu Ala", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
+        story.append(Paragraph("🪽 Ala predominante", styles["H2"]))
         for txt in ala_textos:
             story.append(Paragraph(txt, styles["Body"]))
-    
-    
-    # -------------------------
-    # Síntesis Evolutiva
-    # -------------------------
-    sintesis_evolutiva = desarrollo.get("sintesis_evolutiva", [])
-    if sintesis_evolutiva:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis Evolutiva", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in sintesis_evolutiva:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # -------------------------
-    # Síntesis de Afinidades
-    # -------------------------
-    sintesis_afinidades = desarrollo.get("sintesis_afinidades", [])
-    if sintesis_afinidades:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("Síntesis de Afinidades", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in sintesis_afinidades:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # -------------------------
-    # Síntesis de Opuestos
-    # -------------------------
-    opuestos_sintesis = desarrollo.get("opuestos_sintesis", [])
-    if opuestos_sintesis:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("🧩 Síntesis de Opuestos complementarios", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
-        for p in opuestos_sintesis:
-            story.append(Paragraph(p, styles["Body"]))
-    
-    
-    # -------------------------
-    # Síntesis estructural
-    # -------------------------
+
+    # ── ESTRUCTURA DEL PENSAMIENTO ────────────────────────────────────────────
+    bonus = desarrollo.get("bonus_estructura", {})
     bonus_sintesis = desarrollo.get("bonus_sintesis", [])
+    if bonus:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("Estructura del pensamiento", styles["H2"]))
+        for value in bonus.values():
+            if isinstance(value, dict) and "parrafo" in value:
+                story.append(Paragraph(value["parrafo"], styles["Body"]))
     if bonus_sintesis:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("🧠 Síntesis estructural", styles["H2"]))
-        story.append(Spacer(1, 4))
-    
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Síntesis estructural", styles["H3"]))
         for linea in bonus_sintesis:
             story.append(Paragraph(linea, styles["Body"]))
 
+    # ── SOFT SKILLS / ÁREAS DE MEJORA ─────────────────────────────────────────
+    story.append(Spacer(1, 12))
+    story.append(PageBreak())
+    story.append(Paragraph("💼 Perfil de competencias", styles["H2"]))
+    story.append(Spacer(1, 6))
 
-    # ---------------------------------
-    # 7️⃣ GRÁFICOS ANEXOS
-    # ---------------------------------
-    # Resultados por tipo
+    soft_skills  = desarrollo.get("soft_skills",  [])
+    areas_mejora = desarrollo.get("areas_mejora",  [])
+
+    if soft_skills:
+        story.append(Paragraph("<b>✅ Soft skills destacadas</b>", styles["BodyPro"]))
+        for sk in soft_skills:
+            story.append(Paragraph(f"• {sk}", styles["Tag"]))
+        story.append(Spacer(1, 6))
+
+    if areas_mejora:
+        story.append(Paragraph("<b>🔧 Principales áreas de desarrollo</b>", styles["BodyPro"]))
+        for am in areas_mejora:
+            story.append(Paragraph(f"• {am}", styles["Tag"]))
+
+    # ── PERFIL LABORAL PROFESIONAL ─────────────────────────────────────────────
+    perfil = desarrollo.get("perfil_laboral") or {}
+    if perfil:
+        story.append(Spacer(1, 14))
+        story.append(Paragraph("🔹 Perfil laboral", styles["H2"]))
+        story.append(Spacer(1, 4))
+
+        story.append(Paragraph("<b>Tu estilo de trabajo</b>", styles["BodyPro"]))
+        story.append(Paragraph(perfil.get("estilo_trabajo", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Cómo liderás</b>", styles["BodyPro"]))
+        story.append(Paragraph(perfil.get("liderazgo", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Cómo te ven los demás</b>", styles["BodyPro"]))
+        story.append(Paragraph(perfil.get("como_te_ven", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>En integración (evolución sana)</b>", styles["BodyPro"]))
+        story.append(Paragraph(perfil.get("integracion", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>En desintegración (bajo estrés)</b>", styles["BodyPro"]))
+        story.append(Paragraph(perfil.get("desintegracion", ""), styles["Body"]))
+
+        # Matching de roles
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("🔹 Matching de roles", styles["H2"]))
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Puestos ideales para este perfil:</b>", styles["BodyPro"]))
+        for rol in perfil.get("roles_ideales", []):
+            story.append(Paragraph(f"• {rol}", styles["Tag"]))
+        matching_desc = perfil.get("matching_desc")
+        if matching_desc:
+            story.append(Spacer(1, 6))
+            story.append(Paragraph("<b>Combinación de integración activa:</b>", styles["BodyPro"]))
+            story.append(Paragraph(matching_desc, styles["Body"]))
+
+        # Alertas
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("🔹 Alertas de desempeño", styles["H2"]))
+        story.append(Spacer(1, 4))
+        if perfil.get("alerta_activa"):
+            story.append(Paragraph(
+                f"⚠️ <b>ALERTA — Patrón de desintegración activo "
+                f"(Tipo {perfil['tipo_desintegracion']}: {perfil['pct_desintegracion']}%)</b>",
+                styles["BodyPro"]))
+            story.append(Paragraph(perfil.get("alerta_desintegracion", ""), styles["Body"]))
+            story.append(Paragraph(
+                f"<b>Recomendación:</b> {perfil.get('recomendacion_alerta', '')}",
+                styles["Body"]))
+        else:
+            story.append(Paragraph(
+                "No se detecta patrón de desintegración activo. "
+                "El perfil muestra indicadores dentro del rango esperado.",
+                styles["Body"]))
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(
+                f"<i>Para referencia: {perfil.get('alerta_desintegracion', '')}</i>",
+                styles["Body"]))
+
+        # ── Matching de equipo ────────────────────────────────────────────────
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("🔹 Dinámica de equipo", styles["H2"]))
+        story.append(Spacer(1, 4))
+
+        def tipos_str(lista):
+            return ", ".join(f"Tipo {t}" for t in lista) if lista else "—"
+
+        story.append(Paragraph("<b>Fluidez natural</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_fluidez', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_fluidez', []))})</i>",
+            styles["Body"]))
+
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Perfiles complementarios</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_complemento', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_complemento', []))})</i>",
+            styles["Body"]))
+
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Posibles fricciones</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_friccion', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_friccion', []))})</i>",
+            styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            f"<b>Clave de crecimiento en equipo:</b> {perfil.get('equipo_clave', '')}",
+            styles["Body"]))
+
+    # ── GRÁFICOS ANEXOS ───────────────────────────────────────────────────────
     story.append(PageBreak())
     story.append(Paragraph("Gráficos anexos", styles["H1"]))
     story.append(Spacer(1, 12))
     story.append(Paragraph("Resultados por eneatipo (%):", styles["Body"]))
-    
+
     resultados = payload.get("graficos_anexos", {}).get("resultados", {})
     for t in range(1, 10):
         pct = resultados.get(str(t), 0)
         story.append(Paragraph(f"• Tipo {t}: {pct}%", styles["Body"]))
-    
-   
-    resultados = payload.get("graficos_anexos", {}).get("resultados", {})
+
     if resultados:
         radar_img = generar_radar_image(resultados)
-    
         img = Image(radar_img)
-        img.drawHeight = 12 * cm
-        img.drawWidth = 12 * cm
-    
+        img.drawHeight = 12*cm
+        img.drawWidth  = 12*cm
         story.append(img)
-    
-    # Mensaje final
+
+    # ── MENSAJE FINAL ─────────────────────────────────────────────────────────
     story.append(Spacer(1, 10))
     story.append(PageBreak())
     story.append(Paragraph("Mensaje final", styles["H2"]))
     story.append(Paragraph(payload.get("mensaje_final", ""), styles["Body"]))
 
-    doc.build(
-        story,
-        onFirstPage=lambda c, d: None,
-        onLaterPages=add_header_footer
-    )
-    
+    doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=add_header_footer)
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
@@ -984,27 +1230,22 @@ def build_pdf_from_payload(payload: dict) -> bytes:
 
 @app.get("/pdf/<int:report_id>")
 def download_pdf(report_id):
-
     if not DBSession:
         return redirect(url_for("index"))
-
     db = DBSession()
     try:
         r = db.get(Report, report_id)
         if not r:
             return redirect(url_for("index"))
-
         payload = r.report_json
     finally:
         db.close()
-
     pdf_bytes = build_pdf_from_payload(payload)
-
     return send_file(
         io.BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=True,
-        download_name="Informe profundo de autoconocimiento.pdf",
+        download_name=f"{TITULO_INFORME}.pdf",
     )
 @app.get("/")
 def index():
@@ -1017,17 +1258,13 @@ def quiz_get():
         return redirect(url_for("index"))
     questions_all = load_questions()
     page = int(request.args.get("page") or 1)
-
     per_page = 30
     total_pages = (len(questions_all) + per_page - 1) // per_page
-
     page = max(1, min(page, total_pages))
     start = (page - 1) * per_page
-    end = start + per_page
+    end   = start + per_page
     chunk = questions_all[start:end]
-
     answers = session.get("answers", {})
-
     return render_template(
         "quiz.html",
         questions=chunk,
@@ -1036,65 +1273,47 @@ def quiz_get():
         answers=answers,
     )
 
-@app.post("/crear_preferencia")
-def crear_preferencia():
-    # Guardar datos del usuario en sesión antes del pago
+
+@app.post("/iniciar")
+def iniciar():
+    """Reemplaza el flujo de MercadoPago: guarda datos y va directo al quiz."""
     session["usuario"] = {
-        "nombre": request.form.get("nombre"),
-        "email": request.form.get("email"),
-        "sexo": request.form.get("sexo"),
+        "nombre":           request.form.get("nombre"),
+        "email":            request.form.get("email"),
+        "sexo":             request.form.get("sexo"),
         "fecha_nacimiento": request.form.get("fecha_nacimiento"),
-        "hora_nacimiento": None if request.form.get("hora_desconocida") == "1" else request.form.get("hora_nacimiento"),
+        "hora_nacimiento":  (
+            None if request.form.get("hora_desconocida") == "1"
+            else request.form.get("hora_nacimiento")
+        ),
         "hora_desconocida": request.form.get("hora_desconocida") == "1",
-        "fecha_test": datetime.utcnow().isoformat(),
+        "fecha_test":       datetime.utcnow().isoformat(),
     }
     session["answers"] = {}
-
-    sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
-
-    preference_data = {
-        "items": [{
-            "title": "Informe profundo de autoconocimiento",
-            "quantity": 1,
-            "unit_price": 25000,  # ← precio en pesos ARS
-            "currency_id": "ARS",
-        }],
-        "payer": {
-            "email": session["usuario"]["email"],
-        },
-        "back_urls": {
-            "success": f"{APP_URL}/pago_exitoso",
-            "failure": f"{APP_URL}/pago_fallido",
-            "pending": f"{APP_URL}/pago_pendiente",
-        },
-        "auto_return": "approved",
-        "external_reference": session["usuario"]["email"],
-    }
-
-    result = sdk.preference().create(preference_data)
-    preference = result["response"]
-
-    return redirect(preference["init_point"])  # redirige a MP
+    session["pago_ok"] = True       # acceso libre
+    return redirect(url_for("quiz_get", page=1))
 
 
-@app.get("/pago_exitoso")
-def pago_exitoso():
-    # Mercado Pago redirige aquí con ?status=approved
-    status = request.args.get("status")
-    if status == "approved":
-        session["pago_ok"] = True
-        return redirect(url_for("quiz_get", page=1))
-    return redirect(url_for("pago_fallido"))
+@app.post("/finalizar")
+def finalizar():
+    """Genera el PDF del informe, lo envía por mail y redirige a una página de confirmación."""
+    report_id = session.get("report_id")
+    if not report_id or not DBSession:
+        return redirect(url_for("index"))
 
+    db = DBSession()
+    try:
+        r = db.get(Report, report_id)
+        if not r:
+            return redirect(url_for("index"))
+        payload = r.report_json
+    finally:
+        db.close()
 
-@app.get("/pago_fallido")
-def pago_fallido():
-    return render_template("pago_fallido.html")
-
-
-@app.get("/pago_pendiente")
-def pago_pendiente():
-    return render_template("pago_pendiente.html")
+    pdf_bytes   = build_pdf_from_payload(payload)
+    propietario = payload.get("propietario", {}) or {}
+    ok = enviar_informe_por_email(DEST_EMAIL, pdf_bytes, propietario)
+    return render_template("finalizado.html", mail_ok=ok, dest=DEST_EMAIL)
 
 @app.post("/quiz")
 def quiz_post():
@@ -1588,9 +1807,6 @@ def result():
                 mejor_tipo = tipo
     
         top_types = [mejor_tipo]
-    
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    sorted_porcentajes = [(t, porcentaje_scores[t]) for (t, _) in sorted_scores]
 
     # -----------------------------
     # Ala (Wing) del tipo principal
@@ -2296,59 +2512,70 @@ def result():
         (tipo, pct, creencias_limitantes[tipo]) for tipo, pct in low3
     ]
     
-    bonus_data = build_bonus_estructura_pensamiento(porcentaje_scores) 
-    bonus_estructura = bonus_data["estructura"] 
-    bonus_sintesis = bonus_data["sintesis"]
+    bonus_data = build_bonus_estructura_pensamiento(porcentaje_scores)
+    bonus_estructura = bonus_data["estructura"]
+    bonus_sintesis   = bonus_data["sintesis"]
 
-    # ✅ Armar payload del informe (guardamos secciones para el PDF)
+    # ── Perfil laboral + soft skills ─────────────────────────────────────────
+    # Para build_perfil_laboral necesitamos los títulos del eneatipo_textos
+    titulos_por_tipo = {k: {"titulo": v["titulo"]} for k, v in eneatipo_textos.items()}
+
+    # top_types para matching: incluir el segundo más alto además del primero
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    sorted_porcentajes = [(t, porcentaje_scores[t]) for (t, _) in sorted_scores]
+    top_types_matching = [t for t, _ in sorted_scores[:2] if _ > 0]   # hasta 2
+
+    perfil_laboral = build_perfil_laboral(
+        top_types_matching, porcentaje_scores, titulos_por_tipo
+    )
+    soft_skills_data = build_soft_skills(
+        porcentaje_scores, sintesis_parrafos,
+        sintesis_afinidades_parrafos, opuestos_sintesis
+    )
+
+    # ✅ Armar payload del informe
     usuario = session.get("usuario", {})
     report_payload = {
-        "titulo": "Informe profundo de autoconocimiento",
-        "analista": "AZ Consultora @az_coaching.terapeutico / +542975203761",
+        "titulo":    TITULO_INFORME,
+        "subtitulo": SUBTITULO_INFORME,
+        "analista":  "AZ Consultora @az_coaching.terapeutico / +542975203761",
         "propietario": usuario,
-        "fecha_test": usuario.get("fecha_test"),
-    
+        "fecha_test":  usuario.get("fecha_test"),
+
         "desarrollo": {
-            "top_types": top_types,
-            "total_marked": total_marked,
-            "max_score": max_score,
-            "eneatipo_textos": eneatipo_textos,
-            "ala_textos": ala_textos,
-            "camino_evolucion": camino_evolucion,
-            "afinidades_parrafos": afinidades_parrafos,
-            "sintesis_afinidades": sintesis_afinidades_parrafos,
-            "opuestos_parrafos": opuestos_parrafos,
-            "opuestos_sintesis": opuestos_sintesis,
-            "analisis_ejes": analisis_ejes_parrafos,
-            "sintesis_evolutiva": sintesis_parrafos,
-            "bonus_estructura": bonus_estructura,
-            "bonus_sintesis": bonus_sintesis,
+            "top_types":             top_types,
+            "total_marked":          total_marked,
+            "max_score":             max_score,
+            "eneatipo_textos":       eneatipo_textos,
+            "ala_textos":            ala_textos,
+            "camino_evolucion":      camino_evolucion,
+            "afinidades_parrafos":   afinidades_parrafos,
+            "sintesis_afinidades":   sintesis_afinidades_parrafos,
+            "opuestos_parrafos":     opuestos_parrafos,
+            "opuestos_sintesis":     opuestos_sintesis,
+            "analisis_ejes":         analisis_ejes_parrafos,
+            "sintesis_evolutiva":    sintesis_parrafos,
+            "bonus_estructura":      bonus_estructura,
+            "bonus_sintesis":        bonus_sintesis,
+            # ── nuevas secciones profesionales ──
+            "perfil_laboral":        perfil_laboral,
+            "soft_skills":           soft_skills_data["soft_skills"],
+            "areas_mejora":          soft_skills_data["areas_mejora"],
         },
 
-        "conclusiones": {
-            "max_score": max_score,
-            "eneatipo_textos": eneatipo_textos,
-            "ala_textos": ala_textos,
-            "sintesis_afinidades": sintesis_afinidades_parrafos,
-            "opuestos_sintesis": opuestos_sintesis,
-            "sintesis_evolutiva": sintesis_parrafos,
-            "bonus_sintesis": bonus_sintesis,
-        },
-
-        "graficos_anexos":  {
-            "resultados": {str(k): v for k, v in porcentaje_scores.items()},
+        "graficos_anexos": {
+            "resultados":         {str(k): v for k, v in porcentaje_scores.items()},
             "sorted_porcentajes": sorted_porcentajes,
-            "top_types": top_types,
-        },  
-            
+            "top_types":          top_types,
+        },
+
         "mensaje_final": (
             "Para una consulta personalizada o exploración de otras herramientas "
             "de autoconocimiento contactar a AZ Consultora @az_coaching.terapeutico "
             "o WhatsApp +54-2975203761."
         ),
     }
-    
-   
+
     # ✅ Guardar en BD
     if DBSession:
         db = DBSession()
@@ -2361,34 +2588,36 @@ def result():
                 porcentaje_scores={str(k): v for k, v in porcentaje_scores.items()},
                 top_types=top_types,
                 report_json=report_payload,
-                report_text="\n".join(sintesis_parrafos)  # opcional
+                report_text="\n".join(sintesis_parrafos),
             )
             db.add(r)
             db.commit()
             session["report_id"] = r.id
         finally:
             db.close()
-    
+
     return render_template(
-            "result.html",
-            sorted_scores=sorted_scores,
-            sorted_porcentajes=sorted_porcentajes,
-            top_types=top_types,
-            max_score=max_score,
-            total_marked=total_marked,
-            eneatipo_textos=eneatipo_textos,
-            ala_textos=ala_textos,
-            labels=labels,
-            values=values,
-            camino_evolucion=camino_evolucion,
-            analisis_ejes_parrafos=analisis_ejes_parrafos,
-            sintesis_parrafos=sintesis_parrafos,
-            afinidades_parrafos=afinidades_parrafos,
-            sintesis_afinidades_parrafos=sintesis_afinidades_parrafos,
-            opuestos_parrafos=opuestos_parrafos,
-            opuestos_sintesis=opuestos_sintesis,
-            bonus_estructura=bonus_estructura,
-            bonus_sintesis= bonus_sintesis,
-            report_id=session.get("report_id")  # 👈 AGREGAR ESTO
-    
-        )
+        "result.html",
+        sorted_scores=sorted_scores,
+        sorted_porcentajes=sorted_porcentajes,
+        top_types=top_types,
+        max_score=max_score,
+        total_marked=total_marked,
+        eneatipo_textos=eneatipo_textos,
+        ala_textos=ala_textos,
+        labels=labels,
+        values=values,
+        camino_evolucion=camino_evolucion,
+        analisis_ejes_parrafos=analisis_ejes_parrafos,
+        sintesis_parrafos=sintesis_parrafos,
+        afinidades_parrafos=afinidades_parrafos,
+        sintesis_afinidades_parrafos=sintesis_afinidades_parrafos,
+        opuestos_parrafos=opuestos_parrafos,
+        opuestos_sintesis=opuestos_sintesis,
+        bonus_estructura=bonus_estructura,
+        bonus_sintesis=bonus_sintesis,
+        perfil_laboral=perfil_laboral,
+        soft_skills=soft_skills_data["soft_skills"],
+        areas_mejora=soft_skills_data["areas_mejora"],
+        report_id=session.get("report_id"),
+    )
