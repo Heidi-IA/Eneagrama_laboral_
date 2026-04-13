@@ -1,20 +1,18 @@
-✨ ENEAGRAMA EVOLUTIVO INTEGRAL
+✨ ENEAGRAMA LABORAL
 
-Un informe profundo para comprender tu estructura interna y tu desafío evolutivo.
-
-Este análisis completo revela no solo quién sos, sino hacia dónde estás llamado a evolucionar.
 
 Incluye:
 
 ✔ Eneatipo principal y ala
-✔ Ejes de afinidad
-✔ Opuestos complementarios
+✔ Orientación vocacional 
+✔ Perfil profesional: cómo liderás, cómo te ven, estilo de trabajo, roles ideales, manejo del estrés
+✔ Afinidad de equipo: eneatipos afines, fricciones
 ✔ Análisis estructural del pensamiento
-✔ Síntesis evolutiva personalizada
-✔ Orientación vocacional ampliada
+✔ Soft skills / áreas de mejora
 ✔ Gráfico radial
+
 
 ⏱ Cuestionario: 25–30 minutos
 📩 Entrega automática en PDF
 
-💰 Valor regular: $25.000 ARS
+💰 Valor regular: a confirmar
