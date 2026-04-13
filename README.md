@@ -15,4 +15,4 @@ Incluye:
 ⏱ Cuestionario: 25–30 minutos
 📩 Entrega automática en PDF
 
-💰 Valor regular: a confirmar
+💰 Valor regular: a confirmar. Escala tentativa: 20.000 operarios, 30.000 cargos medios, 40.000 altos mandos. 
