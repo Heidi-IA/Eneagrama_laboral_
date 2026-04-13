@@ -1083,16 +1083,26 @@ def build_pdf_from_payload(payload: dict) -> bytes:
         story.append(Paragraph("■ Perfil laboral", styles["H2"]))
         story.append(Spacer(1, 4))
 
-        story.append(Paragraph("<b>Tu estilo de trabajo</b>", styles["BodyPro"]))
+        story.append(Paragraph("Tu estilo de trabajo", styles["H3"]))
         story.append(Paragraph(perfil.get("estilo_trabajo", ""), styles["Body"]))
 
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("<b>Cómo liderás</b>", styles["BodyPro"]))
+        story.append(Paragraph("Cómo liderás", styles["H3"]))
         story.append(Paragraph(perfil.get("liderazgo", ""), styles["Body"]))
 
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("<b>Cómo te ven los demás</b>", styles["BodyPro"]))
+        story.append(Paragraph("Cómo te ven los demás", styles["H3"]))
         story.append(Paragraph(perfil.get("como_te_ven", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("En integración (evolución sana)", styles["H3"]))
+        story.append(Paragraph(perfil.get("integracion", ""), styles["Body"]))
+
+        # ← ESTE ES EL TEXTO RICO QUE TE FALTA
+        if perfil.get("matching_desc"):
+            story.append(Paragraph(perfil.get("matching_desc", ""), styles["Body"]))
+
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("En desintegración (bajo estrés)", styles["H3"]))
+        story.append(Paragraph(perfil.get("desintegracion", ""), styles["Body"]))
 
     # ■ Perfil de competencias
     if soft_skills or areas_mejora:
@@ -1117,15 +1127,18 @@ def build_pdf_from_payload(payload: dict) -> bytes:
         story.append(Paragraph("■ Matching de roles", styles["H2"]))
         story.append(Spacer(1, 4))
 
-        if perfil.get("roles_ideales"):
-            story.append(Paragraph("<b>Puestos ideales para este perfil</b>", styles["BodyPro"]))
-            for rol in perfil.get("roles_ideales", []):
-                story.append(Paragraph(f"• {rol}", styles["Tag"]))
+        story.append(Paragraph("Puestos ideales para este perfil:", styles["H3"]))
+        for rol in perfil.get("roles_ideales", []):
+            story.append(Paragraph(f"• {rol}", styles["Tag"]))
 
-        if perfil.get("matching_desc"):
+        tipo_principal = perfil.get("tipo_principal")
+        if tipo_principal:
             story.append(Spacer(1, 6))
-            story.append(Paragraph("<b>Potencial de integración laboral</b>", styles["BodyPro"]))
-            story.append(Paragraph(perfil.get("matching_desc", ""), styles["Body"]))
+            story.append(Paragraph(
+                "Estos roles suelen ajustarse a tu forma de trabajar, liderar y aportar valor, "
+                "porque aprovechan las fortalezas naturales de tu eneatipo.",
+                styles["Body"]
+            ))
 
     # ■ Alertas de desempeño
     if perfil:
@@ -1135,46 +1148,65 @@ def build_pdf_from_payload(payload: dict) -> bytes:
 
         if perfil.get("alerta_activa"):
             story.append(Paragraph(
-                f"⚠️ <b>Patrón de desintegración activo "
-                f"(Tipo {perfil.get('tipo_desintegracion')}: {perfil.get('pct_desintegracion')}%)</b>",
-                styles["BodyPro"]
+                f"Se detecta un patrón de desintegración activo "
+                f"(Tipo {perfil.get('tipo_desintegracion')}: {perfil.get('pct_desintegracion')}%).",
+                styles["Body"]
             ))
             story.append(Paragraph(perfil.get("alerta_desintegracion", ""), styles["Body"]))
             story.append(Paragraph(
-                f"<b>Recomendación:</b> {perfil.get('recomendacion_alerta', '')}",
+                f"Recomendación práctica: {perfil.get('recomendacion_alerta', '')}",
                 styles["Body"]
             ))
         else:
             story.append(Paragraph(
-                "No se detecta un patrón de desintegración activo. "
-                "El desempeño actual se encuentra dentro del rango esperado.",
+                "No se detecta patrón de desintegración activo. El perfil muestra indicadores dentro del rango esperado.",
                 styles["Body"]
             ))
-
+            story.append(Paragraph(
+                f"Para referencia: {perfil.get('alerta_desintegracion', '')}",
+                styles["Body"]
+            ))
+            story.append(Paragraph(
+                f"Recomendación preventiva: {perfil.get('recomendacion_alerta', '')}",
+                styles["Body"]
+            ))
     # ■ Dinámica de equipo
     if perfil:
         story.append(Spacer(1, 10))
         story.append(Paragraph("■ Dinámica de equipo", styles["H2"]))
         story.append(Spacer(1, 4))
 
-        if perfil.get("equipo_texto_fluidez"):
-            story.append(Paragraph("<b>Con quién trabajás con más fluidez</b>", styles["BodyPro"]))
-            story.append(Paragraph(perfil.get("equipo_texto_fluidez", ""), styles["Body"]))
+        story.append(Paragraph("Fluidez natural", styles["H3"]))
+        story.append(Paragraph(perfil.get("equipo_texto_fluidez", ""), styles["Body"]))
+        if perfil.get("equipo_fluidez"):
+            story.append(Paragraph(
+                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_fluidez', [])])})",
+                styles["Body"]
+            ))
 
-        if perfil.get("equipo_texto_complemento"):
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("<b>Con quién te complementás</b>", styles["BodyPro"]))
-            story.append(Paragraph(perfil.get("equipo_texto_complemento", ""), styles["Body"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Perfiles complementarios", styles["H3"]))
+        story.append(Paragraph(perfil.get("equipo_texto_complemento", ""), styles["Body"]))
+        if perfil.get("equipo_complemento"):
+            story.append(Paragraph(
+                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_complemento', [])])})",
+                styles["Body"]
+            ))
 
-        if perfil.get("equipo_texto_friccion"):
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("<b>Zonas de fricción</b>", styles["BodyPro"]))
-            story.append(Paragraph(perfil.get("equipo_texto_friccion", ""), styles["Body"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Posibles fricciones", styles["H3"]))
+        story.append(Paragraph(perfil.get("equipo_texto_friccion", ""), styles["Body"]))
+        if perfil.get("equipo_friccion"):
+            story.append(Paragraph(
+                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_friccion', [])])})",
+                styles["Body"]
+            ))
 
-        if perfil.get("equipo_clave"):
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("<b>Clave para vos en equipo</b>", styles["BodyPro"]))
-            story.append(Paragraph(perfil.get("equipo_clave", ""), styles["Body"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            f"Clave de crecimiento en equipo: {perfil.get('equipo_clave', '')}",
+            styles["Body"]
+        ))
 
     # ■ Estructura del pensamiento (sin síntesis estructural)
     if bonus:
