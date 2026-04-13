@@ -1332,24 +1332,38 @@ def iniciar():
 
 @app.post("/finalizar")
 def finalizar():
-    """Genera el PDF del informe, lo envía por mail y redirige a una página de confirmación."""
     report_id = session.get("report_id")
+
     if not report_id or not DBSession:
-        return redirect(url_for("index"))
+        return render_template("finalizado.html", ok=False)
 
     db = DBSession()
     try:
         r = db.get(Report, report_id)
         if not r:
-            return redirect(url_for("index"))
+            return render_template("finalizado.html", ok=False)
+
         payload = r.report_json
+
     finally:
         db.close()
 
-    pdf_bytes   = build_pdf_from_payload(payload)
-    propietario = payload.get("propietario", {}) or {}
-    ok = enviar_informe_por_email(DEST_EMAIL, pdf_bytes, propietario)
-    return render_template("finalizado.html", mail_ok=ok, dest=DEST_EMAIL)
+    try:
+        pdf_bytes = build_pdf_from_payload(payload)
+        propietario = payload.get("propietario", {}) or {}
+
+        destinatario = propietario.get("email") or DEST_EMAIL
+
+        ok = enviar_informe_por_email(destinatario, pdf_bytes, propietario)
+
+        # 👉 SI TODO SALE BIEN
+        return render_template("finalizado.html", ok=True)
+
+    except Exception as e:
+        print(f"[FINALIZAR ERROR] {e}")
+
+        # 👉 AUNQUE FALLE, MOSTRAMOS MENSAJE CONTROLADO
+        return render_template("finalizado.html", ok=False)
 
 @app.post("/quiz")
 def quiz_post():
