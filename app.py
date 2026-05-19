@@ -34,8 +34,9 @@ MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
 DEST_EMAIL    = "heidi.ayelen@gmail.com"
 
-TITULO_INFORME   = "Informe de personalidad con orientación profesional"
+TITULO_INFORME    = "Informe de personalidad con orientación profesional"
 SUBTITULO_INFORME = "Eneagrama laboral"
+TOTAL_PREGUNTAS   = 270
 
 def add_page_number(canvas, doc):
     page_num = canvas.getPageNumber()
@@ -1023,6 +1024,27 @@ def build_pdf_from_payload(payload: dict) -> bytes:
         "y señales a monitorear. El Eneagrama es dinámico: los resultados reflejan el momento "
         "actual y pueden evolucionar con el tiempo.", styles["Body"]))
 
+    # ── TOTAL AFIRMACIONES ────────────────────────────────────────────────────
+    total_marked = desarrollo.get("total_marked", 0)
+    pct_total    = round((total_marked / TOTAL_PREGUNTAS) * 100, 1) if total_marked else 0
+
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Afirmaciones marcadas", styles["H2"]))
+    story.append(Paragraph(
+        f"<b>{total_marked} de {TOTAL_PREGUNTAS} afirmaciones marcadas ({pct_total}%)</b>",
+        styles["BodyPro"]
+    ))
+    if pct_total > 30:
+        story.append(Paragraph(
+            "El candidato no tiene problema en mostrarse — tiende a la expresión abierta de su perfil.",
+            styles["Body"]
+        ))
+    else:
+        story.append(Paragraph(
+            "El candidato es más bien reservado — puede mostrar mayor cautela al exponerse o ser evaluado.",
+            styles["Body"]
+        ))
+
     # ── ENEATIPO PRINCIPAL ────────────────────────────────────────────────────
     story.append(Spacer(1, 12))
     story.append(Paragraph("Eneatipo principal", styles["H2"]))
@@ -1060,188 +1082,151 @@ def build_pdf_from_payload(payload: dict) -> bytes:
         story.append(Paragraph("Orientación vocacional", styles["H3"]))
         story.append(Paragraph("\n".join(bloque_filtrado), styles["Body"]))
 
-    # =========================================================
-    # SECCIÓN PROFESIONAL ORDENADA
-    # =========================================================
-
-    perfil = desarrollo.get("perfil_laboral") or {}
+    # Ala
     ala_textos = desarrollo.get("ala_textos", [])
-    soft_skills = desarrollo.get("soft_skills", [])
-    areas_mejora = desarrollo.get("areas_mejora", [])
-    bonus = desarrollo.get("bonus_estructura", {})
-
-    # ■ Ala predominante
     if ala_textos:
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Ala predominante", styles["H2"]))
-        story.append(Spacer(1, 4))
-        story.append(Paragraph(ala_textos[0], styles["Body"]))
+        story.append(Spacer(1, 8))
+        story.append(Paragraph("🪽 Ala predominante", styles["H2"]))
+        for txt in ala_textos:
+            story.append(Paragraph(txt, styles["Body"]))
 
-    # ■ Perfil laboral
+    # ── ESTRUCTURA DEL PENSAMIENTO ────────────────────────────────────────────
+    bonus = desarrollo.get("bonus_estructura", {})
+    bonus_sintesis = desarrollo.get("bonus_sintesis", [])
+    if bonus:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("Estructura del pensamiento", styles["H2"]))
+        for value in bonus.values():
+            if isinstance(value, dict) and "parrafo" in value:
+                story.append(Paragraph(value["parrafo"], styles["Body"]))
+    if bonus_sintesis:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Síntesis estructural", styles["H3"]))
+        for linea in bonus_sintesis:
+            story.append(Paragraph(linea, styles["Body"]))
+
+    # ── SOFT SKILLS / ÁREAS DE MEJORA ─────────────────────────────────────────
+    story.append(Spacer(1, 12))
+    story.append(PageBreak())
+    story.append(Paragraph("💼 Perfil de competencias", styles["H2"]))
+    story.append(Spacer(1, 6))
+
+    soft_skills  = desarrollo.get("soft_skills",  [])
+    areas_mejora = desarrollo.get("areas_mejora",  [])
+
+    if soft_skills:
+        story.append(Paragraph("<b>✅ Soft skills destacadas</b>", styles["BodyPro"]))
+        for sk in soft_skills:
+            story.append(Paragraph(f"• {sk}", styles["Tag"]))
+        story.append(Spacer(1, 6))
+
+    if areas_mejora:
+        story.append(Paragraph("<b>🔧 Principales áreas de desarrollo</b>", styles["BodyPro"]))
+        for am in areas_mejora:
+            story.append(Paragraph(f"• {am}", styles["Tag"]))
+
+    # ── PERFIL LABORAL PROFESIONAL ─────────────────────────────────────────────
+    perfil = desarrollo.get("perfil_laboral") or {}
     if perfil:
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Perfil laboral", styles["H2"]))
+        story.append(Spacer(1, 14))
+        story.append(Paragraph("🔹 Perfil laboral", styles["H2"]))
         story.append(Spacer(1, 4))
 
-        story.append(Paragraph("Tu estilo de trabajo", styles["H3"]))
+        story.append(Paragraph("<b>Tu estilo de trabajo</b>", styles["BodyPro"]))
         story.append(Paragraph(perfil.get("estilo_trabajo", ""), styles["Body"]))
 
-        story.append(Paragraph("Cómo liderás", styles["H3"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Cómo liderás</b>", styles["BodyPro"]))
         story.append(Paragraph(perfil.get("liderazgo", ""), styles["Body"]))
 
-        story.append(Paragraph("Cómo te ven los demás", styles["H3"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Cómo te ven los demás</b>", styles["BodyPro"]))
         story.append(Paragraph(perfil.get("como_te_ven", ""), styles["Body"]))
 
         story.append(Spacer(1, 6))
-        story.append(Paragraph("En integración (evolución sana)", styles["H3"]))
+        story.append(Paragraph("<b>En integración (evolución sana)</b>", styles["BodyPro"]))
         story.append(Paragraph(perfil.get("integracion", ""), styles["Body"]))
 
-        # ← ESTE ES EL TEXTO RICO QUE TE FALTA
-        if perfil.get("matching_desc"):
-            story.append(Paragraph(perfil.get("matching_desc", ""), styles["Body"]))
-
         story.append(Spacer(1, 6))
-        story.append(Paragraph("En desintegración (bajo estrés)", styles["H3"]))
+        story.append(Paragraph("<b>En desintegración (bajo estrés)</b>", styles["BodyPro"]))
         story.append(Paragraph(perfil.get("desintegracion", ""), styles["Body"]))
 
-    # ■ Perfil de competencias
-    if soft_skills or areas_mejora:
+        # Matching de roles
         story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Perfil de competencias", styles["H2"]))
+        story.append(Paragraph("🔹 Matching de roles", styles["H2"]))
         story.append(Spacer(1, 4))
-
-        if soft_skills:
-            story.append(Paragraph("<b>Competencias destacadas</b>", styles["BodyPro"]))
-            for sk in soft_skills:
-                story.append(Paragraph(f"• {sk}", styles["Tag"]))
-
-        if areas_mejora:
-            story.append(Spacer(1, 6))
-            story.append(Paragraph("<b>Áreas de mejora</b>", styles["BodyPro"]))
-            for am in areas_mejora:
-                story.append(Paragraph(f"• {am}", styles["Tag"]))
-
-    # ■ Matching de roles
-    if perfil:
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Matching de roles", styles["H2"]))
-        story.append(Spacer(1, 4))
-
-        story.append(Paragraph("Puestos ideales para este perfil:", styles["H3"]))
+        story.append(Paragraph("<b>Puestos ideales para este perfil:</b>", styles["BodyPro"]))
         for rol in perfil.get("roles_ideales", []):
             story.append(Paragraph(f"• {rol}", styles["Tag"]))
-
-        tipo_principal = perfil.get("tipo_principal")
-        if tipo_principal:
+        matching_desc = perfil.get("matching_desc")
+        if matching_desc:
             story.append(Spacer(1, 6))
-            story.append(Paragraph(
-                "Estos roles suelen ajustarse a tu forma de trabajar, liderar y aportar valor, "
-                "porque aprovechan las fortalezas naturales de tu eneatipo.",
-                styles["Body"]
-            ))
+            story.append(Paragraph("<b>Combinación de integración activa:</b>", styles["BodyPro"]))
+            story.append(Paragraph(matching_desc, styles["Body"]))
 
-    # ■ Alertas de desempeño
-    if perfil:
+        # Alertas
         story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Alertas de desempeño", styles["H2"]))
+        story.append(Paragraph("🔹 Alertas de desempeño", styles["H2"]))
         story.append(Spacer(1, 4))
-
         if perfil.get("alerta_activa"):
             story.append(Paragraph(
-                f"Se detecta un patrón de desintegración activo "
-                f"(Tipo {perfil.get('tipo_desintegracion')}: {perfil.get('pct_desintegracion')}%).",
-                styles["Body"]
-            ))
+                f"⚠️ <b>ALERTA — Patrón de desintegración activo "
+                f"(Tipo {perfil['tipo_desintegracion']}: {perfil['pct_desintegracion']}%)</b>",
+                styles["BodyPro"]))
             story.append(Paragraph(perfil.get("alerta_desintegracion", ""), styles["Body"]))
             story.append(Paragraph(
-                f"Recomendación práctica: {perfil.get('recomendacion_alerta', '')}",
-                styles["Body"]
-            ))
+                f"<b>Recomendación:</b> {perfil.get('recomendacion_alerta', '')}",
+                styles["Body"]))
         else:
             story.append(Paragraph(
-                "No se detecta patrón de desintegración activo. El perfil muestra indicadores dentro del rango esperado.",
-                styles["Body"]
-            ))
+                "No se detecta patrón de desintegración activo. "
+                "El perfil muestra indicadores dentro del rango esperado.",
+                styles["Body"]))
+            story.append(Spacer(1, 4))
             story.append(Paragraph(
-                f"Para referencia: {perfil.get('alerta_desintegracion', '')}",
-                styles["Body"]
-            ))
-            story.append(Paragraph(
-                f"Recomendación preventiva: {perfil.get('recomendacion_alerta', '')}",
-                styles["Body"]
-            ))
-    # ■ Dinámica de equipo
-    if perfil:
+                f"<i>Para referencia: {perfil.get('alerta_desintegracion', '')}</i>",
+                styles["Body"]))
+
+        # ── Matching de equipo ────────────────────────────────────────────────
         story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Dinámica de equipo", styles["H2"]))
+        story.append(Paragraph("🔹 Dinámica de equipo", styles["H2"]))
         story.append(Spacer(1, 4))
 
-        story.append(Paragraph("Fluidez natural", styles["H3"]))
-        story.append(Paragraph(perfil.get("equipo_texto_fluidez", ""), styles["Body"]))
-        if perfil.get("equipo_fluidez"):
-            story.append(Paragraph(
-                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_fluidez', [])])})",
-                styles["Body"]
-            ))
+        def tipos_str(lista):
+            return ", ".join(f"Tipo {t}" for t in lista) if lista else "—"
 
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("Perfiles complementarios", styles["H3"]))
-        story.append(Paragraph(perfil.get("equipo_texto_complemento", ""), styles["Body"]))
-        if perfil.get("equipo_complemento"):
-            story.append(Paragraph(
-                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_complemento', [])])})",
-                styles["Body"]
-            ))
+        story.append(Paragraph("<b>Fluidez natural</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_fluidez', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_fluidez', []))})</i>",
+            styles["Body"]))
 
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("Posibles fricciones", styles["H3"]))
-        story.append(Paragraph(perfil.get("equipo_texto_friccion", ""), styles["Body"]))
-        if perfil.get("equipo_friccion"):
-            story.append(Paragraph(
-                f"({', '.join([f'Tipo {t}' for t in perfil.get('equipo_friccion', [])])})",
-                styles["Body"]
-            ))
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Perfiles complementarios</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_complemento', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_complemento', []))})</i>",
+            styles["Body"]))
+
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Posibles fricciones</b>", styles["BodyPro"]))
+        story.append(Paragraph(
+            f"{perfil.get('equipo_texto_friccion', '')} "
+            f"<i>({tipos_str(perfil.get('equipo_friccion', []))})</i>",
+            styles["Body"]))
 
         story.append(Spacer(1, 6))
         story.append(Paragraph(
-            f"Clave de crecimiento en equipo: {perfil.get('equipo_clave', '')}",
-            styles["Body"]
-        ))
+            f"<b>Clave de crecimiento en equipo:</b> {perfil.get('equipo_clave', '')}",
+            styles["Body"]))
 
-    # ■ Estructura del pensamiento (sin síntesis estructural)
-    if bonus:
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("■ Estructura del pensamiento", styles["H2"]))
-        story.append(Spacer(1, 4))
-
-        orden_bonus = [
-            "pensamiento",
-            "inteligencia",
-            "polaridad",
-            "triadas",
-            "expresion",
-            "vincularidad",
-            "conflictos_internos",
-            "reaccion_problemas",
-        ]
-
-        for key in orden_bonus:
-            value = bonus.get(key)
-            if isinstance(value, dict) and value.get("parrafo"):
-                story.append(Paragraph(value["parrafo"], styles["Body"]))
-
-    # salto de página antes de gráficos
+    # ── GRÁFICOS ANEXOS ───────────────────────────────────────────────────────
     story.append(PageBreak())
-
-    # =========================================================
-    # GRÁFICOS ANEXOS
-    # =========================================================
     story.append(Paragraph("Gráficos anexos", styles["H1"]))
     story.append(Spacer(1, 12))
-
-    resultados = payload.get("graficos_anexos", {}).get("resultados", {})
     story.append(Paragraph("Resultados por eneatipo (%):", styles["Body"]))
 
+    resultados = payload.get("graficos_anexos", {}).get("resultados", {})
     for t in range(1, 10):
         pct = resultados.get(str(t), 0)
         story.append(Paragraph(f"• Tipo {t}: {pct}%", styles["Body"]))
@@ -1249,9 +1234,10 @@ def build_pdf_from_payload(payload: dict) -> bytes:
     if resultados:
         radar_img = generar_radar_image(resultados)
         img = Image(radar_img)
-        img.drawHeight = 12 * cm
-        img.drawWidth = 12 * cm
+        img.drawHeight = 12*cm
+        img.drawWidth  = 12*cm
         story.append(img)
+
     # ── MENSAJE FINAL ─────────────────────────────────────────────────────────
     story.append(Spacer(1, 10))
     story.append(PageBreak())
@@ -1332,33 +1318,25 @@ def iniciar():
 
 @app.post("/finalizar")
 def finalizar():
+    """Genera el PDF del informe, lo envía por mail y redirige a una página de confirmación."""
+    report_id = session.get("report_id")
+    if not report_id or not DBSession:
+        return redirect(url_for("index"))
+
+    db = DBSession()
     try:
-        report_id = session.get("report_id")
+        r = db.get(Report, report_id)
+        if not r:
+            return redirect(url_for("index"))
+        payload = r.report_json
+    finally:
+        db.close()
 
-        if not report_id or not DBSession:
-            return render_template("finalizado.html", ok=False)
+    pdf_bytes   = build_pdf_from_payload(payload)
+    propietario = payload.get("propietario", {}) or {}
+    ok = enviar_informe_por_email(DEST_EMAIL, pdf_bytes, propietario)
+    return render_template("finalizado.html", mail_ok=ok, dest=DEST_EMAIL)
 
-        db = DBSession()
-        try:
-            r = db.get(Report, report_id)
-            if not r:
-                return render_template("finalizado.html", ok=False)
-
-            payload = r.report_json
-        finally:
-            db.close()
-
-        pdf_bytes = build_pdf_from_payload(payload)
-        propietario = payload.get("propietario", {}) or {}
-
-        # 👉 SE MANTIENE TU MAIL FIJO
-        ok = enviar_informe_por_email(DEST_EMAIL, pdf_bytes, propietario)
-
-        return render_template("finalizado.html", ok=ok)
-
-    except Exception as e:
-        print(f"[FINALIZAR ERROR] {e}")
-        return render_template("finalizado.html", ok=False)
 @app.post("/quiz")
 def quiz_post():
     if not session.get("pago_ok"):
